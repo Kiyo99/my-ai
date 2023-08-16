@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:my_ai/message.dart';
-import 'package:my_ai/messageBubble.dart';
+import 'package:my_ai/core/auth_local_datasource.dart';
+import 'package:my_ai/widgets/message.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
@@ -18,8 +19,27 @@ class ChatViewModel extends ChangeNotifier {
 
   bool get showLoader => _showLoader;
 
+  void getCachedMessages() {
+    try {
+      final cachedMessages =
+          _ref.read(AuthLocalDataSource.provider).getCachedMessages();
+      print("Cached messages: $cachedMessages");
+      if (cachedMessages != null) {
+        _listMessages.addAll(cachedMessages);
+        notifyListeners();
+      }
+    } catch (e) {
+      print("Error while getting messages: $e");
+    }
+  }
+
+  void saveMessages(List<Message> messages) {
+    _ref.read(AuthLocalDataSource.provider).cacheMessages(messages);
+  }
+
   Future<void> promptGPT(String query) async {
-    _listMessages = [..._listMessages, Message(query, true)];
+    print("messages: $_listMessages");
+    _listMessages = [..._listMessages, Message(text: query, isUser: true)];
     notifyListeners();
 
     _showLoader = true;
@@ -38,10 +58,11 @@ class ChatViewModel extends ChangeNotifier {
       if (response.statusCode == 200) {
         final res = jsonDecode(response.body);
         final botAnswer = res['answer'];
-        print("Answer: ${botAnswer}");
+        print("Answer: $botAnswer");
 
-        _listMessages.add(Message(botAnswer, false));
+        _listMessages.add(Message(isUser: false, text: botAnswer));
         _showLoader = false;
+        saveMessages(_listMessages);
         notifyListeners();
       } else {
         _showLoader = false;
@@ -51,6 +72,13 @@ class ChatViewModel extends ChangeNotifier {
       _showLoader = false;
       print("API call failed with error: $error");
     }
+    notifyListeners();
+  }
+
+  void clearMessages() {
+    _ref.read(AuthLocalDataSource.provider).clearUserData();
+    _listMessages.clear();
+    Get.back();
     notifyListeners();
   }
 
